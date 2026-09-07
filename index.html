@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oasis</title>
+
+  <!-- iOS App Settings -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Oasis">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230d0221'/><text x='50' y='70' font-size='65' font-weight='bold' font-family='sans-serif' fill='%2300f6ff' text-anchor='middle'>O</text></svg>">
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #05020a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: 'Courier New', monospace;
+    }
+    canvas {
+      border: 2px solid #00f6ff;
+      box-shadow: 0 0 25px rgba(0, 246, 255, 0.4);
+      touch-action: manipulation;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="360" height="640"></canvas>
+
+<script>
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+
+  // Load cinematic city background image
+  const bgImage = new Image();
+  bgImage.src = "https://images.unsplash.com/photo-1519501025264-65ba15a82390?q=80&w=1000&auto=format&fit=crop";
+
+  const groundY = 540;
+  let score = 0;
+  let highScore = localStorage.getItem("oasis_highscore") || 0;
+  let gameOver = false;
+  let gameWon = false;
+
+  const player = {
+    x: 50,
+    y: groundY,
+    width: 20,
+    height: 30,
+    vy: 0,
+    gravity: 0.6,
+    jumping: false
+  };
+
+  const obstacle = {
+    x: 400,
+    y: groundY + 5,
+    width: 25,
+    height: 25,
+    speed: 4
+  };
+
+  const keyItem = {
+    x: 600,
+    y: groundY - 80,
+    width: 15,
+    height: 15,
+    collected: false
+  };
+
+  function resetGame() {
+    score = 0;
+    gameOver = false;
+    gameWon = false;
+    player.y = groundY;
+    player.vy = 0;
+    player.jumping = false;
+    obstacle.x = 400;
+    keyItem.x = 600;
+    keyItem.collected = false;
+  }
+
+  function update() {
+    if (gameOver || gameWon) return;
+
+    player.vy += player.gravity;
+    player.y += player.vy;
+
+    if (player.y >= groundY) {
+      player.y = groundY;
+      player.vy = 0;
+      player.jumping = false;
+    }
+
+    obstacle.x -= obstacle.speed;
+    if (obstacle.x < -30) {
+      obstacle.x = 360 + Math.random() * 100;
+      score += 10;
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem("oasis_highscore", highScore);
+      }
+    }
+
+    if (!keyItem.collected) {
+      keyItem.x -= 2;
+      if (keyItem.x < -30) keyItem.x = 500;
+    }
+
+    // Collisions
+    if (
+      player.x < obstacle.x + obstacle.width &&
+      player.x + player.width > obstacle.x &&
+      player.y < obstacle.y + obstacle.height &&
+      player.y + player.height > obstacle.y
+    ) {
+      gameOver = true;
+    }
+
+    if (
+      !keyItem.collected &&
+      player.x < keyItem.x + keyItem.width &&
+      player.x + player.width > keyItem.x &&
+      player.y < keyItem.y + keyItem.height &&
+      player.y + player.height > keyItem.y
+    ) {
+      keyItem.collected = true;
+      gameWon = true;
+    }
+  }
+
+  function draw() {
+    // 1. Draw High-Res City Background Image
+    if (bgImage.complete) {
+      ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+      // Dark cinematic tint overlay
+      ctx.fillStyle = 'rgba(10, 5, 25, 0.4)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+      ctx.fillStyle = '#0d0221';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // 2. Neon Ground Grid Line
+    ctx.strokeStyle = '#ff3864';
+    ctx.lineWidth = 3;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = '#ff3864';
+    ctx.beginPath();
+    ctx.moveTo(0, groundY + 30);
+    ctx.lineTo(canvas.width, groundY + 30);
+    ctx.stroke();
+    ctx.shadowBlur = 0; // Reset glow
+
+    // 3. Player (Parzival)
+    ctx.fillStyle = '#00f6ff';
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = '#00f6ff';
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+
+    // 4. Sixer Obstacle
+    ctx.fillStyle = '#ff3864';
+    ctx.shadowColor = '#ff3864';
+    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+
+    // 5. Copper Key
+    if (!keyItem.collected) {
+      ctx.fillStyle = '#e5c158';
+      ctx.shadowColor = '#e5c158';
+      ctx.fillRect(keyItem.x, keyItem.y, keyItem.width, keyItem.height);
+    }
+    ctx.shadowBlur = 0; // Reset glow
+
+    // 6. UI Text
+    ctx.fillStyle = '#00f6ff';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText("SCORE: " + score, 15, 30);
+    ctx.fillText("BEST: " + highScore, 15, 50);
+    ctx.fillText("KEY: " + (keyItem.collected ? "FOUND!" : "SEARCHING..."), 200, 30);
+
+    if (gameOver) {
+      ctx.fillStyle = '#ff3864';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText("ZEROED OUT!", 110, 280);
+      ctx.font = '13px monospace';
+      ctx.fillText("Tap to Re-enter OASIS", 100, 310);
+    }
+
+    if (gameWon) {
+      ctx.fillStyle = '#e5c158';
+      ctx.font = 'bold 20px monospace';
+      ctx.fillText("COPPER KEY ACQUIRED!", 60, 280);
+      ctx.font = '13px monospace';
+      ctx.fillText("Tap to Play Again", 110, 310);
+    }
+  }
+
+  function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  function handleInput() {
+    if (gameOver || gameWon) {
+      resetGame();
+    } else if (!player.jumping) {
+      player.vy = -12;
+      player.jumping = true;
+    }
+  }
+
+  window.addEventListener("touchstart", handleInput);
+  window.addEventListener("mousedown", handleInput);
+
+  gameLoop();
+</script>
+
+</body>
+</html>
