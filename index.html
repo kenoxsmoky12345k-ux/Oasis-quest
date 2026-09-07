@@ -1,0 +1,285 @@
+# Oasis-quest<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OASIS: The Copper Key Quest</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0f0c20;
+            color: #00ffff;
+            font-family: 'Courier New', Courier, monospace;
+            text-align: center;
+            touch-action: manipulation;
+        }
+        h1 { margin: 10px 0 5px 0; font-size: 20px; text-shadow: 0 0 10px #00ffff; }
+        p { margin: 0 0 10px 0; font-size: 12px; color: #aaa; }
+        canvas {
+            background: #0d0a1a;
+            border: 2px solid #00ffff;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+            display: block;
+            margin: 0 auto;
+            max-width: 95vw;
+        }
+    </style>
+</head>
+<body>
+    <h1>OASIS: COPPER KEY QUEST</h1>
+    <p>Tap Screen to Jump | Collect Key | Avoid Sixers</p>
+    <canvas id="gameCanvas" width="360" height="480"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // Audio Synthesizer
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioCtx();
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+            if (type === 'jump') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(400, now + 0.15);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'key') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, now);
+                osc.frequency.setValueAtTime(659.25, now + 0.08);
+                osc.frequency.setValueAtTime(783.99, now + 0.16);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'fail') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(40, now + 0.3);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+        }
+
+        // State Variables
+        let score = 0;
+        let highScore = localStorage.getItem("oasis_highscore") || 0;
+        let hasKey = false;
+        let gameOver = false;
+        let gameWon = false;
+
+        const groundY = 380;
+        let player = { x: 40, y: groundY, width: 32, height: 32, vy: 0, gravity: 0.65, jumping: false };
+        let obstacle = { x: 360, y: groundY, width: 28, height: 32, speed: 4 };
+        let keyItem = { x: 500, y: 280, width: 24, height: 24, collected: false };
+
+        function jump() {
+            initAudio();
+            if (gameOver || gameWon) {
+                resetGame();
+                return;
+            }
+            if (!player.jumping) {
+                player.vy = -12.5;
+                player.jumping = true;
+                playSound('jump');
+            }
+        }
+
+        window.addEventListener("touchstart", (e) => { e.preventDefault(); jump(); }, { passive: false });
+        window.addEventListener("mousedown", jump);
+
+        function resetGame() {
+            score = 0;
+            hasKey = false;
+            gameOver = false;
+            gameWon = false;
+            player.y = groundY;
+            player.vy = 0;
+            player.jumping = false;
+            obstacle.x = 400;
+            keyItem.x = 600;
+            keyItem.collected = false;
+        }
+
+        function update() {
+            if (gameOver || gameWon) return;
+
+            player.vy += player.gravity;
+            player.y += player.vy;
+
+            if (player.y >= groundY) {
+                player.y = groundY;
+                player.vy = 0;
+                player.jumping = false;
+            }
+
+            obstacle.x -= obstacle.speed;
+            if (obstacle.x < -30) {
+                obstacle.x = 360 + Math.random() * 140;
+                score += 10;
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem("oasis_highscore", highScore);
+                }
+            }
+
+            if (!keyItem.collected) {
+                keyItem.x -= 2;
+                if (keyItem.x < -30) keyItem.x = 520;
+            }
+
+            if (
+                player.x < obstacle.x + obstacle.width &&
+                player.x + player.width > obstacle.x &&
+                player.y < obstacle.y + obstacle.height &&
+                player.y + player.height > obstacle.y
+            ) {
+                gameOver = true;
+                playSound('fail');
+            }
+
+            if (
+                !keyItem.collected &&
+                player.x < keyItem.x + keyItem.width &&
+                player.x + player.width > keyItem.x &&
+                player.y < keyItem.y + keyItem.height &&
+                player.y + player.height > keyItem.y
+            ) {
+                keyItem.collected = true;
+                hasKey = true;
+                gameWon = true;
+                playSound('key');
+            }
+        }
+
+        // 8-Bit Human Avatar (Parzival)
+        function drawHumanPlayer(x, y) {
+            // Hair (Brown)
+            ctx.fillStyle = "#5c3a21";
+            ctx.fillRect(x + 8, y, 16, 4);
+            ctx.fillRect(x + 6, y + 4, 4, 6);
+
+            // Head / Skin
+            ctx.fillStyle = "#ffcc99";
+            ctx.fillRect(x + 10, y + 4, 12, 10);
+
+            // Eyes
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(x + 14, y + 7, 2, 2);
+            ctx.fillRect(x + 19, y + 7, 2, 2);
+
+            // Torso / Jacket (Blue)
+            ctx.fillStyle = "#0088ff";
+            ctx.fillRect(x + 6, y + 14, 20, 10);
+
+            // Arms (Skin)
+            ctx.fillStyle = "#ffcc99";
+            ctx.fillRect(x + 2, y + 16, 4, 8);
+            ctx.fillRect(x + 26, y + 16, 4, 8);
+
+            // Pants (Dark Blue)
+            ctx.fillStyle = "#112266";
+            ctx.fillRect(x + 8, y + 24, 6, 8);
+            ctx.fillRect(x + 18, y + 24, 6, 8);
+        }
+
+        // 8-Bit Enemy Drone
+        function drawSixer(x, y) {
+            ctx.fillStyle = "#ff0055";
+            ctx.fillRect(x + 4, y + 6, 20, 20);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(x + 8, y + 10, 12, 4);
+            ctx.fillStyle = "#ff0000";
+            ctx.fillRect(x + 12, y + 10, 4, 4);
+            ctx.fillStyle = "#880022";
+            ctx.fillRect(x + 6, y + 26, 4, 6);
+            ctx.fillRect(x + 18, y + 26, 4, 6);
+        }
+
+        // 8-Bit Copper Key
+        function drawKey(x, y) {
+            ctx.fillStyle = "#ffcc00";
+            ctx.fillRect(x + 4, y, 12, 8);
+            ctx.fillRect(x + 8, y + 8, 4, 14);
+            ctx.fillRect(x + 12, y + 14, 4, 3);
+            ctx.fillRect(x + 12, y + 19, 4, 3);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Holo-Grid Background
+            ctx.strokeStyle = "rgba(0, 255, 255, 0.1)";
+            ctx.lineWidth = 1;
+            for (let i = 0; i < canvas.width; i += 20) {
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+            }
+
+            // Ground
+            ctx.fillStyle = "#00ffff";
+            ctx.fillRect(0, groundY + 32, canvas.width, 4);
+
+            // Render Sprites
+            drawHumanPlayer(player.x, player.y);
+            drawSixer(obstacle.x, obstacle.y);
+            if (!keyItem.collected) drawKey(keyItem.x, keyItem.y);
+
+            // Scoreboard
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "12px monospace";
+            ctx.fillText("COINS: " + score, 15, 25);
+            ctx.fillText("BEST: " + highScore, 15, 42);
+            ctx.fillText("KEY: " + (hasKey ? "FOUND!" : "SEARCHING..."), 210, 25);
+
+            if (gameOver) {
+                ctx.fillStyle = "rgba(0,0,0,0.85)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#ff0055";
+                ctx.font = "20px monospace";
+                ctx.fillText("ZEROED OUT!", 110, 220);
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "14px monospace";
+                ctx.fillText("Tap to Re-enter OASIS", 90, 260);
+            }
+
+            if (gameWon) {
+                ctx.fillStyle = "rgba(0,0,0,0.85)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#ffcc00";
+                ctx.font = "18px monospace";
+                ctx.fillText("FIRST GATE UNLOCKED!", 70, 220);
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "14px monospace";
+                ctx.fillText("Tap to Replay", 125, 260);
+            }
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+    </script>
+</body>
+</html>
