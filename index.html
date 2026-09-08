@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>OASIS SHOOTER - Key Hunt</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none;font-family:monospace}
+body{background:#0a0a0f;color:#fff;overflow:hidden}
+#hud{position:fixed;top:0;left:0;right:0;height:50px;background:#111;display:flex;justify-content:space-around;align-items:center;z-index:10;border-bottom:2px solid #00ff88}
+#hud div{font-weight:bold}
+#gameCanvas{display:block;margin:50px auto 0;background:#1a1a24;width:100%;max-width:800px;height:calc(100vh - 130px)}
+#controls{position:fixed;bottom:0;left:0;right:0;height:80px;display:flex;justify-content:space-between;padding:10px;z-index:10}
+#joystick{width:120px;height:120px;background:rgba(255,255,255,0.1);border-radius:50%;position:relative;margin-top:-50px;border:2px solid #00ff88}
+#stick{width:50px;height:50px;background:#00ff88;border-radius:50%;position:absolute;left:35px;top:35px}
+#shootBtn{width:100px;height:80px;background:#ff0044;border-radius:20px;border:3px solid #fff;color:#fff;font-weight:bold;font-size:18px}
+#shootBtn:active{background:#fff;color:#ff0044}
+#levelUp{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#00ff88;color:#000;padding:20px 40px;font-size:30px;font-weight:bold;border-radius:10px;display:none;z-index:20}
+</style>
+</head>
+<body>
+<div id="hud">
+<div>❤️ LIVES: <span id="lives">3</span></div>
+<div>🔑 KEYS: <span id="score">0</span></div>
+<div>📶 LEVEL: <span id="level">1</span></div>
+</div>
+<canvas id="gameCanvas"></canvas>
+<div id="levelUp">LEVEL UP!</div>
+<div id="controls">
+<div id="joystick"><div id="stick"></div></div>
+<button id="shootBtn">SHOOT</button>
+</div>
+
+<script>
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+function resize(){canvas.width=800;canvas.height=600;}
+resize();
+
+let keys={}, bullets=[], monsters=[], keyItems=[], walls=[];
+let score=0, lives=3, level=1;
+let player={x:400,y:300,angle:0,speed:0,moveX:0,moveY:0};
+
+function buildMaze(lvl){
+ walls=[];
+ // outer walls
+ walls.push({x:0,y:0,w:800,h:20},{x:0,y:580,w:800,h:20},{x:0,y:0,w:20,h:600},{x:780,y:0,w:20,h:600});
+ // inner puzzle buildings
+ let count=6+lvl;
+ for(let i=0;i<count;i++){
+   walls.push({x:100+Math.random()*600,y:80+Math.random()*400,w:60+Math.random()*80,h:20+Math.random()*60});
+ }
+}
+function spawnMonsters(n){
+ monsters=[];
+ for(let i=0;i<n;i++){
+   monsters.push({x:Math.random()*700+50,y:Math.random()*400+100,hp:1,speed:0.8+level*0.2+Math.random()*0.5});
+ }
+}
+function spawnKey(){
+ keyItems=[{x:Math.random()*700+50,y:Math.random()*400+100}];
+}
+
+buildMaze(1); spawnMonsters(3); spawnKey();
+
+let joy=document.getElementById('joystick'), stick=document.getElementById('stick');
+let joyActive=false, joyCenter={x:0,y:0};
+joy.addEventListener('touchstart',e=>{
+ joyActive=true;
+ let r=joy.getBoundingClientRect();
+ joyCenter={x:r.left+60,y:r.top+60};
+});
+joy.addEventListener('touchmove',e=>{
+ if(!joyActive)return;
+ let t=e.touches[0];
+ let dx=t.clientX-joyCenter.x, dy=t.clientY-joyCenter.y;
+ let dist=Math.sqrt(dx*dx+dy*dy);
+ if(dist>40){dx=dx/dist*40;dy=dy/dist*40;}
+ stick.style.left=35+dx+'px'; stick.style.top=35+dy+'px';
+ player.moveX=dx/40; player.moveY=dy/40;
+ if(dist>5) player.angle=Math.atan2(dy,dx);
+});
+joy.addEventListener('touchend',()=>{
+ joyActive=false; stick.style.left='35px'; stick.style.top='35px';
+ player.moveX=0; player.moveY=0;
+});
+
+// PC controls
+window.addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);
+window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+let mouseX=0,mouseY=0;
+canvas.addEventListener('mousemove',e=>{
+ let r=canvas.getBoundingClientRect();
+ mouseX=(e.clientX-r.left)*(800/r.width);
+ mouseY=(e.clientY-r.top)*(600/r.height);
+ player.angle=Math.atan2(mouseY-player.y, mouseX-player.x);
+});
+
+function shoot(){
+ bullets.push({x:player.x,y:player.y,angle:player.angle,speed:10,life:60});
+}
+document.getElementById('shootBtn').addEventListener('touchstart',e=>{e.preventDefault();shoot();});
+canvas.addEventListener('click',shoot);
+window.addEventListener('keydown',e=>{if(e.code==='Space')shoot();});
+
+function collide(x,y,w,h){
+ for(let wall of walls){
+   if(x<wall.x+wall.w && x+w>wall.x && y<wall.y+wall.h && y+h>wall.y) return true;
+ }
+ return false;
+}
+
+function update(){
+ // player move keyboard
+ let mx=0,my=0;
+ if(keys['w']||keys['arrowup']) my=-1;
+ if(keys['s']||keys['arrowdown']) my=1;
+ if(keys['a']||keys['arrowleft']) mx=-1;
+ if(keys['d']||keys['arrowright']) mx=1;
+ if(mx||my){player.moveX=mx; player.moveY=my; if(!joyActive) player.angle=Math.atan2(my,mx);}
+
+ let nx=player.x+player.moveX*4, ny=player.y+player.moveY*4;
+ if(!collide(nx-10,player.y-10,20,20)) player.x=nx;
+ if(!collide(player.x-10,ny-10,20,20)) player.y=ny;
+
+ // bullets
+ bullets=bullets.filter(b=>{
+   b.x+=Math.cos(b.angle)*b.speed;
+   b.y+=Math.sin(b.angle)*b.speed;
+   b.life--;
+   if(b.life<=0||collide(b.x,b.y,4,4)) return false;
+   for(let i=monsters.length-1;i>=0;i--){
+     let m=monsters[i];
+     if(Math.hypot(b.x-m.x,b.y-m.y)<20){monsters.splice(i,1); return false;}
+   }
+   return true;
+ });
+
+ // monsters chase
+ monsters.forEach(m=>{
+   let ang=Math.atan2(player.y-m.y,player.x-m.x);
+   let nx=m.x+Math.cos(ang)*m.speed, ny=m.y+Math.sin(ang)*m.speed;
+   if(!collide(nx-8,ny-8,16,16)){m.x=nx; m.y=ny;}
+   if(Math.hypot(m.x-player.x,m.y-player.y)<22){
+     lives--; document.getElementById('lives').innerText=lives;
+     m.x=Math.random()*700+50; m.y=Math.random()*100+50;
+     if(lives<=0){alert('GAME OVER! Score: '+score); lives=3; score=0; level=1; buildMaze(1); spawnMonsters(3);}
+   }
+ });
+
+ // keys
+ if(keyItems[0] && Math.hypot(player.x-keyItems[0].x, player.y-keyItems[0].y)<25){
+   score++; document.getElementById('score').innerText=score;
+   if(score%5===0){
+     level++; document.getElementById('level').innerText=level;
+     document.getElementById('levelUp').style.display='block';
+     setTimeout(()=>document.getElementById('levelUp').style.display='none',1000);
+     buildMaze(level); spawnMonsters(3+level);
+   }
+   spawnKey();
+ }
+}
+
+function draw(){
+ ctx.clearRect(0,0,800,600);
+ // walls (puzzle buildings)
+ ctx.fillStyle='#333'; walls.forEach(w=>{ctx.fillRect(w.x,w.y,w.w,w.h); ctx.strokeStyle='#00ff88'; ctx.strokeRect(w.x,w.y,w.w,w.h);});
+ // keys
+ ctx.fillStyle='#ffcc00'; keyItems.forEach(k=>{ctx.beginPath();ctx.arc(k.x,k.y,10,0,Math.PI*2);ctx.fill(); ctx.fillStyle='#000';ctx.fillText('K',k.x-4,k.y+4); ctx.fillStyle='#ffcc00';});
+ // monsters
+ monsters.forEach(m=>{ctx.fillStyle='#ff0044';ctx.beginPath();ctx.arc(m.x,m.y,12,0,Math.PI*2);ctx.fill(); ctx.fillStyle='#fff';ctx.fillRect(m.x-6,m.y-3,12,3);});
+ // bullets
+ ctx.fillStyle='#00ff88'; bullets.forEach(b=>{ctx.beginPath();ctx.arc(b.x,b.y,3,0,Math.PI*2);ctx.fill();});
+ // player with gun
+ ctx.save(); ctx.translate(player.x,player.y); ctx.rotate(player.angle);
+ ctx.fillStyle='#00aaff'; ctx.fillRect(-10,-8,20,16);
+ ctx.fillStyle='#fff'; ctx.fillRect(8,-2,18,4); // gun
+ ctx.restore();
+
+ requestAnimationFrame(()=>{update();draw();});
+}
+draw();
+</script>
+</body>
+</html>
