@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>OASIS - Copper Key Hunt</title>
+
+<!-- NEW APP LOGO FOR GITHUB -->
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00f0ff">
+
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#02020a;overflow:hidden;font-family:'Share Tech Mono',monospace}
+  canvas{display:block;margin:0 auto;box-shadow:0 0 30px #00f0ff}
+  /* COVER - Ready Player One Style */
+  #cover{
+    position:fixed;inset:0;background:radial-gradient(#1a0a2e,#02020a);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    z-index:100;transition:0.8s;
+  }
+  #cover img{
+    width:300px;height:300px;border-radius:70px;
+    border:3px solid cyan;box-shadow:0 0 40px cyan,0 0 80px #ff00a0;
+    animation: float 3s infinite ease-in-out;
+  }
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  #cover h1{color:white;font-family:'Orbitron';letter-spacing:8px;font-size:38px;margin:20px 0 0;text-shadow:0 0 15px cyan}
+  #cover p{color:#ff00a0;margin:5px;letter-spacing:3px}
+  #enterBtn{
+    margin-top:30px;padding:14px 45px;background:black;color:cyan;
+    border:2px solid cyan;border-radius:30px;font-family:'Orbitron';font-size:16px;
+    box-shadow:0 0 20px cyan;cursor:pointer;
+  }
+  #enterBtn:hover{background:cyan;color:black}
+</style>
+</head>
+<body>
+
+<!-- NEW COVER WITH YOUR LOGO -->
+<div id="cover">
+  <img src="icon.png" alt="Oasis Logo">
+  <h1>OASIS</h1>
+  <p>COPPER KEY HUNT</p>
+  <p style="color:white;font-size:12px;margin-top:15px;">AVATARS: PARZIVAL & ART3MIS</p>
+  <button id="enterBtn" onclick="enterOasis()">ENTER THE OASIS</button>
+</div>
+
+<!-- YOUR EXISTING GAME WILL RENDER HERE -->
+<canvas id="game"></canvas>
+
+<script>
+// Cover logic
+function enterOasis(){
+  document.getElementById('cover').style.transform='scale(1.5)';
+  document.getElementById('cover').style.opacity='0';
+  setTimeout(()=>document.getElementById('cover').style.display='none',800);
+  // start your game here
+  if(window.startGame) window.startGame();
+}
+
+// KEEP YOUR EXISTING GAME CODE BELOW THIS LINE
+// Example: your score logic from video
+let score=0; let best=localStorage.getItem('best')||70;
+</script>
+
+<!-- PASTE YOUR OLD GAME SCRIPT HERE, or keep your main.js -->
+<script src="game.js"></script>
+</body>
+</html>
