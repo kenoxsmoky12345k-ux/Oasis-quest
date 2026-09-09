@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>OASIS MAZE</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none;font-family:monospace;user-select:none}
+body{background:#000;overflow:hidden}
+#hud{position:fixed;top:0;left:0;right:0;height:36px;background:#111;display:flex;justify-content:space-around;align-items:center;color:#fff;z-index:10;border-bottom:2px solid #00ff88;font-weight:bold;font-size:14px}
+#gameCanvas{position:fixed;top:36px;left:0;width:100vw;height:calc(100vh - 36px);background:#1a2e1a}
+#joystick{position:fixed;left:14px;bottom:16px;width:115px;height:115px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.2);border-radius:50%;z-index:20}
+#stick{width:46px;height:46px;background:rgba(255,255,255,0.35);border:1px solid #fff;border-radius:50%;position:absolute;left:34px;top:34px}
+#shootBtn{position:fixed;right:14px;bottom:16px;width:88px;height:88px;background:#ff0044;border:2.5px solid #fff;color:#fff;font-weight:bold;border-radius:20px;z-index:20;font-size:17px}
+#msg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#00ff88;color:#000;padding:12px 22px;font-weight:bold;border-radius:10px;display:none;z-index:30}
+#rotate{position:fixed;inset:0;background:#000;color:#00ff88;z-index:9999;display:none;justify-content:center;align-items:center;text-align:center;font-size:26px}
+@media(orientation:portrait){#rotate{display:flex} #hud,#gameCanvas,#joystick,#shootBtn{display:none}}
+</style>
+</head>
+<body>
+<div id="rotate">ROTATE TO LANDSCAPE</div>
+<div id="hud"><div>❤️ <span id="lives">3</span></div><div>🔑 <span id="score">0</span></div><div>🚪 LVL <span id="level">1</span></div></div>
+<canvas id="gameCanvas"></canvas>
+<div id="joystick"><div id="stick"></div></div>
+<button id="shootBtn">SHOOT</button>
+<div id="msg"></div>
+<script>
+const canvas=document.getElementById('gameCanvas'), ctx=canvas.getContext('2d');
+canvas.width=800; canvas.height=480;
+let bullets=[], monsters=[], walls=[], free=[], key=null, gate=null, score=0,lives=3,level=1,hasKey=false;
+let player={x:400,y:240,angle:0,mx:0,my:0};
+const COLS=12, ROWS=7, CW=800/COLS, CH=480/ROWS;
+
+// FIXED MAZES - ALL 12x7 CORRECT
+const MAZES=[
+[
+[0,0,0,0,0,0,0,0],
+[0,0,1,0,0,0,1,0,0,1,0,0],
+[0,0,1,0,1,0,1,0,0,1,0,0],
+[0,0,0,0,1,0,0,0,0,0,0,0],
+[0,1,1,0,0,0,1,1,0,1,0,0],
+[0,0,0,0,1,0,0,0,1,0,0,0],
+[0,0,0,0,0,0,0,0]
+],
+[
+[1,0,0,0,1,0,0,0],
+[0,0,0,0,1,0,0,0,1,0,0,0],
+[0,1,1,0,0,0,1,0,0,0,1,0],
+[0,0,0,0,1,0,0,0,1,0,0,0],
+[0,1,0,0,0,0,1,0,0,0,1,0],
+[0,0,0,1,0,0,0,0,1,0,0,0],
+[0,0,0,0,0,0,0,0]
+],
+[
+[0,0,0,1,0,0,0,0],
+[0,1,0,1,0,1,0,0],
+[0,1,0,0,0,1,0,0],
+[0,0,0,1,0,0,0,0],
+[0,1,0,1,0,1,1,0],
+[0,0,0,0,0,0,0,0],
+[0,0,0,1,0,0,0,0]
+]
+];
+
+function makeMaze(lvl){
+ walls=[]; free=[];
+ let map=MAZES[(lvl-1)%MAZES.length];
+ for(let r=0;r<ROWS;r++){
+  for(let c=0;c<COLS;c++){
+   if(map[r][c]==1) walls.push({x:c*CW,y:r*CH,w:CW,h:CH});
+   else free.push({x:c*CW+CW/2,y:r*CH+CH/2});
+  }
+ }
+}
+function randFree(){return free[Math.floor(Math.random()*free.length)];}
+
+function spawnLevel(){
+ hasKey=false; gate=null; player.x=400; player.y=240;
+ let k=randFree(); while(Math.hypot(k.x-player.x,k.y-player.y)<100) k=randFree();
+ key={x:k.x,y:k.y}; monsters=[];
+ // GUARDING MONSTERS
+ for(let i=0;i<3;i++){let a=(i/3)*Math.PI*2; monsters.push({x:key.x+Math.cos(a)*60,y:key.y+Math.sin(a)*60,spd:0.6,guard:true});}
+ for(let i=0;i<level;i++){let m=randFree(); if(Math.hypot(m.x-player.x,m.y-player.y)>120) monsters.push({x:m.x,y:m.y,spd:0.8+level*0.1,guard:false});}
+}
+makeMaze(1); spawnLevel();
+function hitWall(x,y,rad=12){for(let w of walls){if(x+rad>w.x+12 && x-rad<w.x+w.w-12 && y+rad>w.y+12 && y-rad<w.y+w.h-12) return true;} return false;}
+
+let joy=document.getElementById('joystick'), stick=document.getElementById('stick');
+joy.addEventListener('touchstart',e=>{e.preventDefault();},{passive:false});
+joy.addEventListener('touchmove',e=>{
+ e.preventDefault();
+ let r=joy.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+ let dx=e.touches[0].clientX-cx, dy=e.touches[0].clientY-cy;
+ let d=Math.hypot(dx,dy); if(d>34){dx=dx/d*34; dy=dy/d*34;}
+ stick.style.left=34+dx+'px'; stick.style.top=34+dy+'px';
+ player.mx=dx/34; player.my=dy/34;
+ if(d>5) player.angle=Math.atan2(dy,dx);
+},{passive:false});
+let end=()=>{stick.style.left='34px'; stick.style.top='34px'; player.mx=0; player.my=0;};
+joy.addEventListener('touchend',end); joy.addEventListener('touchcancel',end);
+
+function shoot(){bullets.push({x:player.x+Math.cos(player.angle)*18,y:player.y+Math.sin(player.angle)*18,a:player.angle,s:8,l:80});}
+document.getElementById('shootBtn').addEventListener('touchstart',e=>{e.preventDefault(); shoot();},{passive:false});
+canvas.addEventListener('touchstart',e=>{
+ if(e.touches[0].clientX>window.innerWidth*0.4){
+  let rc=canvas.getBoundingClientRect();
+  let mx=(e.touches[0].clientX-rc.left)*(800/rc.width), my=(e.touches[0].clientY-rc.top)*(480/rc.height);
+  player.angle=Math.atan2(my-player.y,mx-player.x);
+ }
+});
+
+function update(){
+ let nx=player.x+player.mx*3.2, ny=player.y+player.my*3.2;
+ nx=Math.max(20,Math.min(780,nx)); ny=Math.max(20,Math.min(460,ny));
+ if(!hitWall(nx,player.y,14)) player.x=nx;
+ if(!hitWall(player.x,ny,14)) player.y=ny;
+ bullets=bullets.filter(b=>{b.x+=Math.cos(b.a)*b.s; b.y+=Math.sin(b.a)*b.s; b.l--; if(b.l<=0||hitWall(b.x,b.y,3)) return false; for(let i=monsters.length-1;i>=0;i--){if(Math.hypot(b.x-monsters[i].x,b.y-monsters[i].y)<18){monsters.splice(i,1); return false;}} return true;});
+ monsters.forEach(m=>{let an=Math.atan2(player.y-m.y,player.x-m.x); let tx=m.x+Math.cos(an)*m.spd, ty=m.y+Math.sin(an)*m.spd; if(!hitWall(tx,m.y,10)) m.x=tx; if(!hitWall(m.x,ty,10)) m.y=ty; if(Math.hypot(m.x-player.x,m.y-player.y)<22){lives--; document.getElementById('lives').innerText=lives; let p=randFree(); m.x=p.x; m.y=p.y; if(lives<=0){alert('GAME OVER '+score); lives=3; score=0; level=1; document.getElementById('lives').innerText=3; document.getElementById('score').innerText=0; document.getElementById('level').innerText=1; makeMaze(1); spawnLevel();}}});
+ if(key && Math.hypot(player.x-key.x,player.y-key.y)<20){key=null; hasKey=true; score++; document.getElementById('score').innerText=score; let g=randFree(); gate={x:g.x,y:g.y}; let ms=document.getElementById('msg'); ms.innerText='GATE OPEN! FIND EXIT'; ms.style.display='block'; setTimeout(()=>ms.style.display='none',1500);}
+ if(gate && hasKey && Math.hypot(player.x-gate.x,player.y-gate.y)<24){level++; document.getElementById('level').innerText=level; makeMaze(level); spawnLevel(); let ms=document.getElementById('msg'); ms.innerText='LEVEL '+level+' NEW MAZE!'; ms.style.display='block'; setTimeout(()=>ms.style.display='none',1200);}
+}
+function drawTree(x,y,w,h){let cx=x+w/2, cy=y+h/2; ctx.fillStyle='#3d2817'; ctx.fillRect(cx-3,cy+6,6,12); ctx.fillStyle='#1a7a1a'; ctx.beginPath(); ctx.arc(cx,cy,14,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#4eff9a'; ctx.beginPath(); ctx.arc(cx-3,cy-4,5,0,Math.PI*2); ctx.fill();}
+function draw(){
+ ctx.fillStyle='#1b311b'; ctx.fillRect(0,0,800,480);
+ walls.forEach(w=>drawTree(w.x,w.y,w.w,w.h));
+ if(key){ctx.fillStyle='#ffcc00'; ctx.shadowColor='#ffcc00'; ctx.shadowBlur=12; ctx.beginPath(); ctx.arc(key.x,key.y,8,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='#000'; ctx.font='bold 11px monospace'; ctx.fillText('K',key.x-4,key.y+3);}
+ if(gate){ctx.fillStyle='#00ff88'; ctx.fillRect(gate.x-18,gate.y-18,36,36); ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(gate.x-18,gate.y-18,36,36); ctx.fillStyle='#000'; ctx.font='bold 10px monospace'; ctx.fillText('EXIT',gate.x-12,gate.y+3);}
+ monsters.forEach(m=>{ctx.fillStyle=m.guard?'#ff0033':'#ff4466'; ctx.beginPath(); ctx.arc(m.x,m.y,m.guard?12:9,0,Math.PI*2); ctx.fill(); if(m.guard){ctx.strokeStyle='#ffcc00'; ctx.lineWidth=2; ctx.stroke();} ctx.fillStyle='#fff'; ctx.fillRect(m.x-4,m.y-1,8,2);});
+ ctx.fillStyle='#ffff00'; bullets.forEach(b=>{ctx.beginPath(); ctx.arc(b.x,b.y,4,0,Math.PI*2); ctx.fill();});
+ ctx.save(); ctx.translate(player.x,player.y); ctx.rotate(player.angle);
+ ctx.fillStyle='#00d5ff'; ctx.strokeStyle='#fff'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill(); ctx.stroke();
+ ctx.fillStyle='#fff'; ctx.fillRect(12,-2.5,16,5); ctx.restore();
+}
+function loop(){update();draw();requestAnimationFrame(loop);} loop();
+</script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js?v=13')}</script>
+</body>
+</html>
