@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>OASIS MAZE</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none;font-family:monospace;user-select:none;-webkit-user-select:none}
+body{background:#0a0a0f;overflow:hidden}
+#hud{position:fixed;top:0;left:0;right:0;height:45px;background:#111;display:flex;justify-content:space-around;align-items:center;z-index:10;border-bottom:2px solid #00ff88;color:#fff;font-weight:bold}
+#gameCanvas{display:block;margin-top:45px;background:#1e2a1e;width:100vw;height:calc(100vh - 45px)}
+#joystick{position:fixed;left:15px;bottom:20px;width:130px;height:130px;background:rgba(0,255,136,0.15);border-radius:50%;border:2px solid #00ff88;z-index:15}
+#stick{width:55px;height:55px;background:#00ff88;border-radius:50%;position:absolute;left:37px;top:37px;box-shadow:0 0 15px #00ff88}
+#shootBtn{position:fixed;right:15px;bottom:20px;width:110px;height:110px;background:#ff0044;border-radius:25px;border:3px solid #fff;color:#fff;font-weight:bold;font-size:20px;z-index:15}
+#shootBtn:active{transform:scale(0.9);background:#fff;color:#ff0044}
+#levelUp{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#00ff88;color:#000;padding:15px 30px;font-size:22px;font-weight:bold;border-radius:12px;display:none;z-index:20;text-align:center}
+#rotatePrompt{position:fixed;inset:0;background:#000;color:#00ff88;z-index:9999;display:none;justify-content:center;align-items:center;text-align:center;font-size:28px;font-weight:bold;padding:20px;line-height:1.5}
+@media screen and (orientation:portrait){#rotatePrompt{display:flex} #hud,#gameCanvas,#joystick,#shootBtn{display:none!important}}
+</style>
+</head>
+<body>
+<div id="rotatePrompt">🔄<br>PLEASE ROTATE<br>Turn to landscape ↔️</div>
+<div id="hud"><div>❤️ <span id="lives">3</span></div><div>🔑 <span id="score">0</span></div><div>🚪 LVL <span id="level">1</span></div></div>
+<canvas id="gameCanvas"></canvas>
+<div id="levelUp">GATE OPEN! GO TO EXIT!</div>
+<div id="joystick"><div id="stick"></div></div>
+<button id="shootBtn">SHOOT</button>
+
+<script>
+const canvas=document.getElementById('gameCanvas'), ctx=canvas.getContext('2d');
+canvas.width=800; canvas.height=600;
+
+let bullets=[], monsters=[], walls=[], freeCells=[], keyItem=null, gate=null;
+let score=0,lives=3,level=1, hasKey=false;
+let player={x:100,y:100,angle:0,moveX:0,moveY:0};
+
+const COLS=12, ROWS=8;
+const CELL_W=800/COLS, CELL_H=600/ROWS;
+
+function buildMaizeFarm(lvl){
+ walls=[]; freeCells=[];
+ let layout = [
+  [1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,1,0,0,0,0,1],
+  [1,0,1,1,0,1,1,0,1,0,1,1],
+  [1,0,0,0,0,0,0,0,1,0,0,1],
+  [1,0,1,1,1,0,1,1,0,1,0,1],
+  [1,0,0,0,0,0,1,0,0,0,0,1],
+  [1,0,1,0,1,1,1,0,1,1,0,1],
+  [1,1,1,1,1,1,1,1],
+ ];
+ for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+   if(layout[r][c]==1){
+     walls.push({x:c*CELL_W, y:r*CELL_H, w:CELL_W, h:CELL_H});
+   } else {
+     freeCells.push({x:c*CELL_W+CELL_W/2, y:r*CELL_H+CELL_H/2});
+   }
+ }
+}
+function randFree(){ return freeCells[Math.floor(Math.random()*freeCells.length)]; }
+function spawnKey(){
+ let p=randFree();
+ keyItem={x:p.x,y:p.y}; hasKey=false; gate=null;
+}
+function spawnGate(){
+ let p=freeCells[freeCells.length-2];
+ gate={x:p.x,y:p.y};
+ let el=document.getElementById('levelUp'); el.style.display='block'; setTimeout(()=>el.style.display='none',1500);
+}
+function spawnMonsters(n){
+ monsters=[];
+ for(let i=0;i<n;i++){ let p=randFree(); if(Math.hypot(p.x-player.x,p.y-player.y)>100) monsters.push({x:p.x,y:p.y,speed:0.8+level*0.2}); }
+}
+buildMaizeFarm(1);
+let startPos=randFree(); player.x=startPos.x; player.y=startPos.y;
+spawnKey(); spawnMonsters(3);
+
+// JOYSTICK - FIXED
+let joy=document.getElementById('joystick'), stick=document.getElementById('stick');
+let joyActive=false;
+joy.addEventListener('touchstart',e=>{
+  e.preventDefault(); joyActive=true;
+},{passive:false});
+joy.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(!joyActive) return;
+  let rect=joy.getBoundingClientRect();
+  let cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+  let t=e.touches[0];
+  let dx=t.clientX-cx, dy=t.clientY-cy;
+  let dist=Math.sqrt(dx*dx+dy*dy);
+  let max=40;
+  if(dist>max){ dx=dx/dist*max; dy=dy/dist*max; }
+  stick.style.left=(37+dx)+'px';
+  stick.style.top=(37+dy)+'px';
+  player.moveX=dx/max;
+  player.moveY=dy/max;
+  if(dist>8) player.angle=Math.atan2(dy,dx);
+},{passive:false});
+function endJoy(e){ e.preventDefault(); joyActive=false; stick.style.left='37px'; stick.style.top='37px'; player.moveX=0; player.moveY=0; }
+joy.addEventListener('touchend',endJoy,{passive:false});
+joy.addEventListener('touchcancel',endJoy,{passive:false});
+
+// AIM - drag anywhere on right half
+canvas.addEventListener('touchmove',e=>{
+  if(e.touches[0].clientX > window.innerWidth/2){
+    let rect=canvas.getBoundingClientRect();
+    let t=e.touches[0];
+    let mx=(t.clientX-rect.left)*(800/rect.width);
+    let my=(t.clientY-rect.top)*(600/rect.height);
+    player.angle=Math.atan2(my-player.y,mx-player.x);
+  }
+},{passive:false});
+
+function shoot(){ bullets.push({x:player.x+Math.cos(player.angle)*12, y:player.y+Math.sin(player.angle)*12, angle:player.angle, speed:8, life:90}); }
+document.getElementById('shootBtn').addEventListener('touchstart',e=>{e.preventDefault(); shoot();},{passive:false});
+document.getElementById('shootBtn').addEventListener('click',shoot);
+canvas.addEventListener('click',shoot);
+window.addEventListener('keydown',e=>{ if(e.code==='Space') shoot(); });
+
+function isWall(x,y){
+ for(let w of walls){
+   if(x>w.x+5 && x<w.x+w.w-5 && y>w.y+5 && y<w.y+w.h-5) return true;
+ }
+ return false;
+}
+function update(){
+ let nx=player.x+player.moveX*3.5;
+ let ny=player.y+player.moveY*3.5;
+ if(!isWall(nx,player.y)) player.x=nx;
+ if(!isWall(player.x,ny)) player.y=ny;
+
+ bullets=bullets.filter(b=>{
+   b.x+=Math.cos(b.angle)*b.speed; b.y+=Math.sin(b.angle)*b.speed; b.life--;
+   if(b.life<=0 || isWall(b.x,b.y)) return false;
+   for(let i=monsters.length-1;i>=0;i--){ let m=monsters[i]; if(Math.hypot(b.x-m.x,b.y-m.y)<18){monsters.splice(i,1); return false
