@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>OASIS MAZE</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none}
+body{background:#000;overflow:hidden}
+#hud{position:fixed;top:0;left:0;right:0;height:36px;background:#111;display:flex;justify-content:space-around;align-items:center;color:#fff;z-index:10;border-bottom:2px solid #00ff88;font-family:monospace;font-weight:bold}
+#gameCanvas{position:fixed;top:36px;left:0;width:100vw;height:calc(100vh - 36px);background:#163016}
+#joystick{position:fixed;left:15px;bottom:15px;width:110px;height:110px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.2);border-radius:50%;z-index:20}
+#stick{width:44px;height:44px;background:rgba(255,255,255,0.4);border:1px solid #fff;border-radius:50%;position:absolute;left:33px;top:33px}
+#shootBtn{position:fixed;right:15px;bottom:15px;width:85px;height:85px;background:#ff0044;border:2px solid #fff;color:#fff;font-weight:bold;border-radius:18px;z-index:20}
+#msg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#00ff88;color:#000;padding:10px 20px;font-weight:bold;border-radius:8px;display:none;z-index:30;font-family:monospace}
+</style>
+</head>
+<body>
+<div id="hud"><div>❤️ <span id="lives">3</span></div><div>🔑 <span id="score">0</span></div><div>🚪 LVL <span id="level">1</span></div></div>
+<canvas id="gameCanvas"></canvas>
+<div id="joystick"><div id="stick"></div></div>
+<button id="shootBtn">SHOOT</button>
+<div id="msg"></div>
+<script>
+const canvas=document.getElementById('gameCanvas'),ctx=canvas.getContext('2d');
+canvas.width=800; canvas.height=480;
+let bullets=[],monsters=[],walls=[],free=[],key=null,gate=null,score=0,lives=3,level=1,hasKey=false;
+let player={x:400,y:240,angle:0,mx:0,my:0};
+const COLS=12,ROWS=6,CW=800/COLS,CH=480/ROWS;
+
+function makeMaze(lvl){
+ walls=[]; free=[];
+ for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+   let x=c*CW, y=r*CH;
+   // keep center clear for player
+   if(Math.hypot(c-6,r-3)<1.5){free.push({x:x+CW/2,y:y+CH/2}); continue;}
+   // random maize - more each level
+   if(Math.random()<0.22+ lvl*0.03){
+     walls.push({x:x+4,y:y+4,w:CW-8,h:CH-8});
+   }else{
+     free.push({x:x+CW/2,y:y+CH/2});
+   }
+ }
+}
+function randFree(){return free[Math.floor(Math.random()*free.length)];}
+function spawn(){
+ hasKey=false; gate=null; player.x=400; player.y=240;
+ let k=randFree(); key={x:k.x,y:k.y};
+ monsters=[];
+ for(let i=0;i<3;i++){let a=(i/3)*Math.PI*2; monsters.push({x:key.x+Math.cos(a)*65,y:key.y+Math.sin(a)*65,spd:0.6,guard:true});}
+ for(let i=0;i<level;i++){let m=randFree(); if(Math.hypot(m.x-player.x,m.y-player.y)>100) monsters.push({x:m.x,y:m.y,spd:0.8+level*0.12,guard:false});}
+}
+makeMaze(1); spawn();
+function hitWall(x,y,rad=12){for(let w of walls){if(x+rad>w.x && x-rad<w.x+w.w && y+rad>w.y && y-rad<w.y+w.h) return true;} return false;}
+let joy=document.getElementById('joystick'),stick=document.getElementById('stick');
+joy.addEventListener('touchmove',e=>{
+ e.preventDefault();
+ let r=joy.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
+ let dx=e.touches[0].clientX-cx,dy=e.touches[0].clientY-cy;
+ let d=Math.hypot(dx,dy); if(d>33){dx=dx/d*33; dy=dy/d*33;}
+ stick.style.left=33+dx+'px'; stick.style.top=33+dy+'px';
+ player.mx=dx/33; player.my=dy/33;
+ if(d>5) player.angle=Math.atan2(dy,dx);
+},{passive:false});
+joy.addEventListener('touchend',()=>{stick.style.left='33px'; stick.style.top='33px'; player.mx=0; player.my=0;});
+function shoot(){bullets.push({x:player.x+Math.cos(player.angle)*18,y:player.y+Math.sin(player.angle)*18,a:player.angle,s:9,l:80});}
+document.getElementById('shootBtn').addEventListener('touchstart',e=>{e.preventDefault(); shoot();},{passive:false});
+function update(){
+ let nx=player.x+player.mx*3.2,ny=player.y+player.my*3.2;
+ nx=Math.max(18,Math.min(782,nx)); ny=Math.max(18,Math.min(462,ny));
+ if(!hitWall(nx,player.y,14)) player.x=nx;
+ if(!hitWall(player.x,ny,14)) player.y=ny;
+ bullets=bullets.filter(b=>{b.x+=Math.cos(b.a)*b.s; b.y+=Math.sin(b.a)*b.s; b.l--; if(b.l<=0||hitWall(b.x,b.y,3)) return false; for(let i=monsters.length-1;i>=0;i--){if(Math.hypot(b.x-monsters[i].x,b.y-monsters[i].y)<18){monsters.splice(i,1); return false;}} return true;});
+ monsters.forEach(m=>{let an=Math.atan2(player.y-m.y,player.x-m.x); let tx=m.x+Math.cos(an)*m.spd,ty=m.y+Math.sin(an)*m.spd; if(!hitWall(tx,m.y,10)) m.x=tx; if(!hitWall(m.x,ty,10)) m.y=ty; if(Math.hypot(m.x-player.x,m.y-player.y)<22){lives--; document.getElementById('lives').innerText=lives; let p=randFree(); m.x=p.x; m.y=p.y; if(lives<=0){alert('GAME OVER '+score); lives=3; score=0; level=1; makeMaze(1); spawn(); document.getElementById('lives').innerText=3; document.getElementById('score').innerText=0; document.getElementById('level').innerText=1;}}});
+ if(key && Math.hypot(player.x-key.x,player.y-key.y)<20){key=null; hasKey=true; score++; document.getElementById('score').innerText=score; let g=randFree(); gate={x:g.x,y:g.y}; let ms=document.getElementById('msg'); ms.innerText='GATE OPEN!'; ms.style.display='block'; setTimeout(()=>ms.style.display='none',1200);}
+ if(gate && hasKey && Math.hypot(player.x-gate.x,player.y-gate.y)<24){level++; document.getElementById('level').innerText=level; makeMaze(level); spawn();}
+}
+function drawTree(x,y,w,h){let cx=x+w/2,cy=y+h/2; ctx.fillStyle='#3d2817'; ctx.fillRect(cx-3,cy+6,6,12); ctx.fillStyle='#167016'; ctx.beginPath(); ctx.arc(cx,cy,15,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#3bff8a'; ctx.beginPath(); ctx.arc(cx-3,cy-3,6,0,Math.PI*2); ctx.fill();}
+function draw(){
+ ctx.fillStyle='#1a341a'; ctx.fillRect(0,0,800,480);
+ walls.forEach(w=>drawTree(w.x,w.y,w.w,w.h));
+ if(key){ctx.fillStyle='#ffcc00'; ctx.beginPath(); ctx.arc(key.x,key.y,9,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#000'; ctx.font='bold 11px monospace'; ctx.fillText('K',key.x-4,key.y+3);}
+ if(gate){ctx.fillStyle='#00ff88'; ctx.fillRect(gate.x-18,gate.y-18,36,36); ctx.strokeStyle='#fff'; ctx.strokeRect(gate.x-18,gate.y-18,36,36); ctx.fillStyle='#000'; ctx.font='bold 10px monospace'; ctx.fillText('EXIT',gate.x-13,gate.y+3);}
+ monsters.forEach(m=>{ctx.fillStyle=m.guard?'#ff0022':'#ff5566'; ctx.beginPath(); ctx.arc(m.x,m.y,m.guard?12:9,0,Math.PI*2); ctx.fill(); if(m.guard){ctx.strokeStyle='#ff0'; ctx.lineWidth=2; ctx.stroke();}});
+ ctx.fillStyle='#ffff00'; bullets.forEach(b=>{ctx.beginPath(); ctx.arc(b.x,b.y,4,0,Math.PI*2); ctx.fill();});
+ ctx.save(); ctx.translate(player.x,player.y); ctx.rotate(player.angle); ctx.fillStyle='#00d5ff'; ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle='#fff'; ctx.fillRect(12,-3,16,6); ctx.restore();
+}
+function loop(){update(); draw(); requestAnimationFrame(loop);} loop();
+</script>
+</body>
+</html>
